@@ -1,0 +1,19 @@
+# 가상환경
+.venv/
+venv/
+ENV/
+
+# API 키 및 설정 파일 (절대 깃허브 업로드 금지)
+.env
+*.toml
+.streamlit/secrets.toml
+# 만약 pyproject.toml 같은 패키지 설정 파일은 올려야 하고, 비밀키 파일만 제외하고 싶다면:
+# secrets.toml
+# .streamlit/secrets.toml
+
+# 파이썬 캐시 파일
+__pycache__/
+*.py[cod]
+
+# Mac OS 설정 파일
+.DS_Store

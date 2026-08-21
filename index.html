@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>할 일 목록</title>
+    <style>
+        body { 
+            background-color: #fdf6f0; 
+            font-family: 'Pretendard', sans-serif; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            min-height: 100vh; 
+            margin: 0; 
+        }
+        .container { 
+            background: #fff; 
+            width: 500px; 
+            border-radius: 20px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.05); 
+            overflow: hidden; 
+        }
+        .header { background: #d0e8e0; padding: 2rem; }
+        .header h2 { margin: 0; color: #333; }
+        .header p { margin: 0.5rem 0 0; color: #555; }
+        .content { padding: 2rem; }
+        .input-group { display: flex; gap: 0.5rem; margin-bottom: 2rem; align-items: center; }
+        .input-group label { color: #555; font-weight: bold; width: 60px; }
+        input { flex: 1; padding: 0.8rem; border: 1px solid #ddd; border-radius: 8px; }
+        button { padding: 0.8rem 1.5rem; border: none; border-radius: 8px; cursor: pointer; background: #e88b64; color: white; font-weight: bold; }
+        .list-header { display: flex; justify-content: space-between; color: #555; font-weight: bold; margin-bottom: 1rem; }
+        ul { list-style: none; padding: 0; }
+        li { display: flex; align-items: center; gap: 0.5rem; padding: 0.8rem 0; border-bottom: 1px solid #eee; }
+        .completed { text-decoration: line-through; color: gray; }
+        .delete-btn { background: #eee; color: #777; padding: 0.3rem 0.6rem; margin-left: auto; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="header">
+            <h2>오늘의 할 일</h2>
+            <p>작은 일도 하나씩, 가볍게 끝내보세요.</p>
+        </div>
+        <div class="content">
+            <div class="input-group">
+                <label>새 할 일</label>
+                <input type="text" id="todoInput" placeholder="새로운 할 일을 입력하세요">
+                <button id="addBtn">추가하기</button>
+            </div>
+            <div class="list-header">
+                <span>할 일 목록</span>
+                <span id="todoCount">0개 남음</span>
+            </div>
+            <ul id="todoList">
+                <li id="emptyMsg" style="justify-content: center; color: #888; border: none;">아직 등록된 할 일이 없습니다.</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const input = document.getElementById('todoInput');
+        const addBtn = document.getElementById('addBtn');
+        const list = document.getElementById('todoList');
+        const countSpan = document.getElementById('todoCount');
+        const emptyMsg = document.getElementById('emptyMsg');
+
+        let count = 0;
+
+        const updateCount = (change) => {
+            count += change;
+            countSpan.textContent = `${count}개 남음`;
+        };
+
+        addBtn.addEventListener('click', () => {
+            const text = input.value.trim();
+            if (!text) return;
+
+            if (emptyMsg) {
+                emptyMsg.remove();
+            }
+
+            const li = document.createElement('li');
+            li.innerHTML = `
+                <input type="checkbox">
+                <span class="text">${text}</span>
+                <button class="delete-btn">삭제</button>
+            `;
+
+            li.querySelector('input').addEventListener('change', (e) => {
+                li.querySelector('.text').classList.toggle('completed', e.target.checked);
+                updateCount(e.target.checked ? -1 : 1);
+            });
+
+            li.querySelector('.delete-btn').addEventListener('click', () => {
+                if (!li.querySelector('input').checked) updateCount(-1);
+                li.remove();
+                if (list.children.length === 0) {
+                    list.appendChild(emptyMsg);
+                }
+            });
+
+            list.appendChild(li);
+            updateCount(1);
+            input.value = '';
+        });
+    </script>
+</body>
+</html>
