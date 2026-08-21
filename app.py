@@ -133,6 +133,56 @@ def get_supabase_client():
         st.error(f"Supabase 연결 설정을 확인해주세요: {error}")
         return None
 
+def fetch_app_name(table_name, default_name):
+    """이름 테이블의 첫 번째 이름을 조회하고, 없으면 기본 이름을 생성합니다."""
+    client = get_supabase_client()
+    if client is None:
+        return None
+    try:
+        response = client.table(table_name).select("id, name").order(
+            "id", desc=False
+        ).limit(1).execute()
+        data = response.data or []
+        if data:
+            return data[0]
+
+        response = client.table(table_name).insert({"name": default_name}).execute()
+        data = response.data or []
+        return data[0] if data else None
+    except Exception as error:
+        st.error(f"{table_name} 테이블의 이름을 불러오는 중 오류가 발생했습니다: {error}")
+        return None
+
+def update_app_name(table_name, new_name):
+    """이름 테이블의 첫 번째 행을 새 이름으로 변경합니다."""
+    client = get_supabase_client()
+    if client is None:
+        return False
+    try:
+        response = client.table(table_name).select("id").order(
+            "id", desc=False
+        ).limit(1).execute()
+        data = response.data or []
+        if data:
+            client.table(table_name).update({"name": new_name.strip()}).eq(
+                "id", data[0]["id"]
+            ).execute()
+        else:
+            client.table(table_name).insert({"name": new_name.strip()}).execute()
+        return True
+    except Exception as error:
+        st.error(f"{table_name} 테이블의 이름을 저장하는 중 오류가 발생했습니다: {error}")
+        return False
+
+def load_app_names():
+    """Supabase의 메모장·튜터 이름을 세션 상태에 반영합니다."""
+    memo_record = fetch_app_name("memo_name", st.session_state.memo_name)
+    tutor_record = fetch_app_name("tutor_name", st.session_state.tutor_name)
+    if memo_record and memo_record.get("name"):
+        st.session_state.memo_name = memo_record["name"]
+    if tutor_record and tutor_record.get("name"):
+        st.session_state.tutor_name = tutor_record["name"]
+
 def fetch_memos():
     """Supabase memos 테이블에서 최신 메모를 조회합니다."""
     client = get_supabase_client()
@@ -248,6 +298,32 @@ def update_tutor_review(session_id, review):
         return True
     except Exception as error:
         st.error(f"복습 내용 저장 중 오류가 발생했습니다: {error}")
+        return False
+
+def update_tutor_header(session_id, header):
+    """tutor_sessions의 튜터 이름을 변경합니다."""
+    client = get_supabase_client()
+    if client is None:
+        return False
+    try:
+        client.table("tutor_sessions").update({"header": header.strip()}).eq(
+            "id", session_id
+        ).execute()
+        return True
+    except Exception as error:
+        st.error(f"튜터 이름 변경 중 오류가 발생했습니다: {error}")
+        return False
+
+def delete_tutor_session(session_id):
+    """tutor_sessions에서 선택한 튜터 세션을 삭제합니다."""
+    client = get_supabase_client()
+    if client is None:
+        return False
+    try:
+        client.table("tutor_sessions").delete().eq("id", session_id).execute()
+        return True
+    except Exception as error:
+        st.error(f"튜터 세션 삭제 중 오류가 발생했습니다: {error}")
         return False
 
 # --- OpenAI 요약 함수 ---
@@ -455,6 +531,12 @@ def init_session_state():
         st.session_state.tutor_header = ""
     if "last_menu" not in st.session_state:
         st.session_state.last_menu = None
+    if "memo_name" not in st.session_state:
+        st.session_state.memo_name = "나만의 메모장"
+    if "tutor_name" not in st.session_state:
+        st.session_state.tutor_name = "나만의 튜터"
+    if "editing_tutor_id" not in st.session_state:
+        st.session_state.editing_tutor_id = None
 
 def restore_tutor_session():
     """URL의 session_id가 있으면 Supabase에서 튜터 세션을 복원합니다."""
@@ -626,7 +708,43 @@ def delete_note(note_id):
 def render_sidebar():
     """사이드바 메뉴를 구성합니다."""
     st.sidebar.title("📌 메뉴")
-    return st.sidebar.radio("원하는 기능을 선택하세요", ["메모", "나만의 튜터"])
+    return st.sidebar.radio(
+        "원하는 기능을 선택하세요",
+        ["memo", "tutor"],
+        format_func=lambda menu_key: (
+            st.session_state.memo_name if menu_key == "memo"
+            else st.session_state.tutor_name
+        ),
+        key="main_menu",
+    )
+
+def render_page_header(menu):
+    """메모장과 튜터의 이름을 메인 페이지에서 각각 변경합니다."""
+    if menu == "memo":
+        name_key = "memo_name"
+        title = st.session_state.memo_name
+        form_key = "memo_name_form"
+        input_key = "memo_name_input"
+    else:
+        name_key = "tutor_name"
+        title = st.session_state.tutor_name
+        form_key = "tutor_name_form"
+        input_key = "tutor_name_input"
+
+    title_col, rename_col = st.columns([0.72, 0.28], vertical_alignment="bottom")
+    with title_col:
+        st.title(title)
+    with rename_col:
+        with st.form(form_key):
+            new_name = st.text_input("이름", value=title, key=input_key)
+            if st.form_submit_button("이름 변경"):
+                if new_name.strip():
+                    table_name = "memo_name" if menu == "memo" else "tutor_name"
+                    if update_app_name(table_name, new_name):
+                        st.session_state[name_key] = new_name.strip()
+                        st.rerun()
+                else:
+                    st.warning("이름을 입력하세요.")
 
 def render_note_input():
     """메모 작성 UI를 렌더링합니다."""
@@ -770,11 +888,42 @@ def render_tutor_session_list():
 
     for session in sessions:
         header = session.get("header") or "이름 없는 튜터"
-        if st.button(header, key=f"open_tutor_{session['id']}", use_container_width=True):
-            clear_tutor_state()
-            st.query_params.clear()
-            st.query_params["session_id"] = str(session["id"])
-            st.rerun()
+        session_id = str(session["id"])
+        name_col, menu_col = st.columns([0.88, 0.12])
+        with name_col:
+            if st.button(header, key=f"open_tutor_{session_id}", use_container_width=True):
+                clear_tutor_state()
+                st.query_params.clear()
+                st.query_params["session_id"] = session_id
+                st.rerun()
+        with menu_col:
+            with st.popover("⋯", use_container_width=True):
+                if st.button("삭제", key=f"delete_tutor_{session_id}", use_container_width=True):
+                    if delete_tutor_session(session_id):
+                        if st.session_state.tutor_session_id == session_id:
+                            clear_tutor_state()
+                        st.rerun()
+                if st.button("이름 변경", key=f"edit_tutor_{session_id}", use_container_width=True):
+                    st.session_state.editing_tutor_id = session_id
+                    st.rerun()
+
+        if st.session_state.editing_tutor_id == session_id:
+            with st.form(f"tutor_rename_form_{session_id}"):
+                new_header = st.text_input("새 튜터 이름", value=header)
+                save_col, cancel_col = st.columns(2)
+                with save_col:
+                    save_name = st.form_submit_button("저장")
+                with cancel_col:
+                    cancel_name = st.form_submit_button("취소")
+                if cancel_name:
+                    st.session_state.editing_tutor_id = None
+                    st.rerun()
+                if save_name:
+                    if not new_header.strip():
+                        st.warning("튜터 이름을 입력하세요.")
+                    elif update_tutor_header(session_id, new_header):
+                        st.session_state.editing_tutor_id = None
+                        st.rerun()
 
 def render_tutor_upload():
     """PDF 업로드부터 텍스트 추출, 요약, 퀴즈 생성을 순서대로 실행합니다."""
@@ -784,7 +933,7 @@ def render_tutor_upload():
         st.query_params["tutor_view"] = "list"
         st.rerun()
 
-    st.subheader("📚 나만의 튜터")
+    st.subheader(f"{st.session_state.tutor_name} 만들기")
     tutor_header = st.text_input(
         "튜터의 이름을 입력하세요",
         key="tutor_header",
@@ -837,7 +986,6 @@ def render_tutor_upload():
                     st.session_state.tutor_document = document
                     st.session_state.tutor_chat = []
                     st.session_state.review_index = None
-                    st.session_state.pdf_notes.append(document)
                     st.rerun()
             except Exception as e:
                 st.error(f"PDF 처리 중 오류가 발생했습니다: {e}")
@@ -918,21 +1066,22 @@ def render_note_list():
 
 st.set_page_config(page_title="나만의 메모장", page_icon="📝")
 apply_pastel_blue_theme()
-st.title("📝 나만의 메모장")
 
 init_session_state()
+load_app_names()
 restore_tutor_session()
 menu = render_sidebar()
 
-if menu == "나만의 튜터" and st.session_state.last_menu != "나만의 튜터":
+if menu == "tutor" and st.session_state.last_menu != "tutor":
     if not st.query_params.get("session_id"):
         clear_tutor_state()
         st.query_params.clear()
         st.query_params["tutor_view"] = "list"
 st.session_state.last_menu = menu
+render_page_header(menu)
 
-if menu == "메모":
+if menu == "memo":
     render_note_input()
     render_note_list()
-elif menu == "나만의 튜터":
+elif menu == "tutor":
     render_tutor_input()
